@@ -143,41 +143,60 @@ with tabs[2]:
     st.plotly_chart(px.scatter(seg_named, x="recency_days", y="revenue_total", color="segment_name"), use_container_width=True)
 
 # 4. CHURN PREDICTION
-# 4. CHURN PREDICTION
+# ------------------ TAB 3: CHURN PREDICTION ------------------
 with tabs[3]:
-    st.subheader("Churn prediction")
-    
-    # 1. Check if we have enough unique labels to train
-    if len(labels.unique()) < 2:
-        st.warning("⚠️ **Not enough variety in data to train the model.**")
-        st.info("Because of the selected time window or sample, the model only sees one outcome (e.g., everyone is still active). Try selecting a larger 'Time Window' in the sidebar.")
+    st.subheader("Churn Prediction")
+
+    if "order_date" not in transactions.columns:
+        st.warning("No `order_date` column; churn modeling unavailable.")
     else:
-        with st.spinner("Training churn model..."):
-            try:
-                max_time = transactions["order_date"].max()
-                
-                # Re-run training only if we have both classes
-                model = train_churn_model(train_feats, labels, feature_columns=select_feature_columns(train_feats))
+        # 1. Prepare training data
+        max_time = transactions["order_date"].max()
+        as_of_train = choose_as_of_for_forward_churn(transactions, horizon_days=int(churn_horizon))
+        train_feats = build_customer_features_asof(transactions, as_of=as_of_train, lookback_days=180)
+
+        # 2. Generate Labels
+        labels = forward_churn_labels(
+            transactions, 
+            as_of=as_of_train, 
+            horizon_days=int(churn_horizon), 
+            customer_ids=pd.Index(train_feats["customer_id"].astype(str))
+        )
+
+        # 3. SAFETY CHECK: Ensure we have at least 2 classes (Churn vs No Churn)
+        if labels.nunique() < 2:
+            st.error("⚠️ **Training Failed: Class Imbalance.**")
+            st.info("The current data sample only contains one outcome (everyone stayed). Try increasing the 'Time Window' to 'all' or increasing the 'Churn Horizon' in the sidebar.")
+        else:
+            with st.spinner("Training churn model..."):
+                # 4. Train and Predict
+                feature_cols = select_feature_columns(train_feats)
+                model_result = train_churn_model(train_feats, labels, feature_columns=feature_cols)
                 
                 current_feats = build_customer_features_asof(transactions, as_of=max_time, lookback_days=180)
-                churn_risk_df = predict_churn_risk(model, current_feats)
+                churn_risk_df = predict_churn_risk(model_result, current_feats)
                 
+                # 5. Visualization
                 scored = current_feats.merge(churn_risk_df.reset_index(), on="customer_id", how="left")
-                
-                st.plotly_chart(px.histogram(scored, x="churn_risk", title="Churn Risk Distribution (Probability)"), use_container_width=True)
-                st.write("### Customer Risk Scores")
-                st.dataframe(scored[['customer_id', 'churn_risk']].sort_values('churn_risk', ascending=False).head(100), use_container_width=True)
-                
-            except Exception as e:
-                st.error(f"Model Training Error: {e}")
+                st.plotly_chart(px.histogram(scored, x="churn_risk", title="Churn Risk Probability Distribution"), use_container_width=True)
+                st.dataframe(scored[['customer_id', 'churn_risk']].sort_values("churn_risk", ascending=False).head(50), use_container_width=True)
 
-# 5. DECISIONS
+# ------------------ TAB 4: DECISION ENGINE ------------------
 with tabs[4]:
-    st.subheader("Decision engine (actions)")
-    # Merge segmentation and churn for the decision engine
-    customers_scored = seg_named.merge(churn_risk_df.reset_index(), on="customer_id", how="left")
-    decisions = recommend_actions(customers_scored)
-    st.dataframe(decisions[["customer_id", "segment_name", "revenue_total", "churn_risk", "recommended_action"]], use_container_width=True)
+    st.subheader("Strategic Actions")
+    
+    # Ensure churn_risk_df exists from the previous tab
+    if 'churn_risk_df' in locals() and 'seg_named' in locals():
+        customers_scored = seg_named.merge(churn_risk_df.reset_index(), on="customer_id", how="left")
+        decisions = recommend_actions(customers_scored)
+        
+        st.write("### Recommended Marketing Actions")
+        st.dataframe(
+            decisions[["customer_id", "segment_name", "churn_risk", "recommended_action"]].sort_values("churn_risk", ascending=False),
+            use_container_width=True
+        )
+    else:
+        st.info("Please run the Segmentation and Churn tabs first to generate recommendations.")
 
 with tabs[5]:
     st.subheader("Raw data (Sampled)")
