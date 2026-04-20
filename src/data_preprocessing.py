@@ -32,7 +32,7 @@ def default_paths() -> DataPaths:
     root = Path(__file__).resolve().parents[1]
     return DataPaths(
         root=root,
-        csv_path=root / "ecommerce_data.csv",
+        csv_path=root / "dataset" / "retail.csv",
         online_retail_xlsx_path=root / "dataset" / "online_retail_II.xlsx",
     )
 
