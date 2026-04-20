@@ -143,24 +143,33 @@ with tabs[2]:
     st.plotly_chart(px.scatter(seg_named, x="recency_days", y="revenue_total", color="segment_name"), use_container_width=True)
 
 # 4. CHURN PREDICTION
+# 4. CHURN PREDICTION
 with tabs[3]:
     st.subheader("Churn prediction")
-    with st.spinner("Training churn model..."):
-        max_time = transactions["order_date"].max()
-        as_of_train = choose_as_of_for_forward_churn(transactions, horizon_days=int(churn_horizon))
-        train_feats = build_customer_features_asof(transactions, as_of=as_of_train, lookback_days=180)
-        
-        labels = forward_churn_labels(transactions, as_of=as_of_train, horizon_days=int(churn_horizon), 
-                                     customer_ids=pd.Index(train_feats["customer_id"].astype(str)))
-        
-        model = train_churn_model(train_feats, labels, feature_columns=select_feature_columns(train_feats))
-        
-        current_feats = build_customer_features_asof(transactions, as_of=max_time, lookback_days=180)
-        churn_risk_df = predict_churn_risk(model, current_feats)
-        
-        scored = current_feats.merge(churn_risk_df.reset_index(), on="customer_id", how="left")
-        st.plotly_chart(px.histogram(scored, x="churn_risk", title="Churn Risk Distribution"), use_container_width=True)
-        st.dataframe(scored.head(100), use_container_width=True)
+    
+    # 1. Check if we have enough unique labels to train
+    if len(labels.unique()) < 2:
+        st.warning("⚠️ **Not enough variety in data to train the model.**")
+        st.info("Because of the selected time window or sample, the model only sees one outcome (e.g., everyone is still active). Try selecting a larger 'Time Window' in the sidebar.")
+    else:
+        with st.spinner("Training churn model..."):
+            try:
+                max_time = transactions["order_date"].max()
+                
+                # Re-run training only if we have both classes
+                model = train_churn_model(train_feats, labels, feature_columns=select_feature_columns(train_feats))
+                
+                current_feats = build_customer_features_asof(transactions, as_of=max_time, lookback_days=180)
+                churn_risk_df = predict_churn_risk(model, current_feats)
+                
+                scored = current_feats.merge(churn_risk_df.reset_index(), on="customer_id", how="left")
+                
+                st.plotly_chart(px.histogram(scored, x="churn_risk", title="Churn Risk Distribution (Probability)"), use_container_width=True)
+                st.write("### Customer Risk Scores")
+                st.dataframe(scored[['customer_id', 'churn_risk']].sort_values('churn_risk', ascending=False).head(100), use_container_width=True)
+                
+            except Exception as e:
+                st.error(f"Model Training Error: {e}")
 
 # 5. DECISIONS
 with tabs[4]:
