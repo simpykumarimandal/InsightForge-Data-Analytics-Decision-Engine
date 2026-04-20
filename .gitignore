@@ -1,0 +1,16 @@
+# Python virtual environment
+.venv/
+
+# IDE settings
+.vscode/
+
+# Python cache
+__pycache__/
+.pytest_cache/
+
+# Streamlit specific
+.streamlit/
+
+# Large Datasets (Optional but recommended)
+# It's usually better to keep large .xlsx files out of Git
+dataset/online_retail_II.xlsx
