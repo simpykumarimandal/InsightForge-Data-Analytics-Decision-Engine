@@ -195,10 +195,4 @@ def choose_as_of_for_forward_churn(
     max_time = times.max()
     return max_time - pd.Timedelta(days=int(horizon_days))
 
-# Inside train_churn_model or your streamlit_app.py
-unique_classes = np.unique(y_train)
 
-if len(unique_classes) < 2:
-    st.warning("⚠️ Training skipped: The selected data only contains one category (everyone churned or no one churned).")
-    # Return a dummy result or None to prevent the crash
-    return None
