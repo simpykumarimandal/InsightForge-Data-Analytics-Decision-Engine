@@ -201,12 +201,67 @@ with tabs[2]:
 
 with tabs[3]:
     st.subheader("Churn prediction")
-    st.info("Churn model logic active. Using parameters from sidebar.")
-    # Placeholder for model execution logic if needed
 
+    if "order_date" not in transactions.columns:
+        st.warning("No `order_date` column; churn modeling unavailable.")
+        st.stop()
+
+    max_time = pd.to_datetime(transactions["order_date"], errors="coerce").max()
+
+    as_of_train = choose_as_of_for_forward_churn(transactions, horizon_days=int(churn_horizon_days))
+    train_features = build_customer_features_asof(transactions, as_of=as_of_train, lookback_days=180)
+
+    labels = forward_churn_labels(
+        transactions,
+        as_of=as_of_train,
+        horizon_days=int(churn_horizon_days),
+        customer_ids=pd.Index(train_features["customer_id"].astype(str)),
+    )
+
+    feature_cols = select_feature_columns(train_features)
+
+    model_result = train_churn_model(train_features, labels, feature_columns=feature_cols)
+
+    customer_features = build_customer_features_asof(transactions, as_of=max_time, lookback_days=180)
+    churn_risk = predict_churn_risk(model_result, customer_features)
+
+    scored = customer_features.merge(churn_risk.reset_index(), on="customer_id", how="left")
+
+    st.plotly_chart(px.histogram(scored, x="churn_risk", title="Churn Risk Distribution"), use_container_width=True)
+    st.dataframe(scored.head(50), use_container_width=True)
 with tabs[4]:
-    st.subheader("Decision engine")
-    st.info("Recommendations based on current data segments.")
+    st.subheader("Decision engine (actions)")
+
+    customer_features = build_customer_features(transactions)
+    seg_named = name_segments(segment_customers(customer_features, n_clusters=int(n_clusters)).customers)
+
+    max_time = pd.to_datetime(transactions["order_date"], errors="coerce").max()
+
+    as_of_train = choose_as_of_for_forward_churn(transactions, horizon_days=int(churn_horizon_days))
+    train_features = build_customer_features_asof(transactions, as_of=as_of_train, lookback_days=180)
+
+    labels = forward_churn_labels(
+        transactions,
+        as_of=as_of_train,
+        horizon_days=int(churn_horizon_days),
+        customer_ids=pd.Index(train_features["customer_id"].astype(str)),
+    )
+
+    feature_cols = select_feature_columns(train_features)
+
+    model_result = train_churn_model(train_features, labels, feature_columns=feature_cols)
+
+    current_features = build_customer_features_asof(transactions, as_of=max_time, lookback_days=180)
+    churn_risk = predict_churn_risk(model_result, current_features)
+
+    customers_scored = seg_named.merge(churn_risk.reset_index(), on="customer_id", how="left")
+
+    decisions = recommend_actions(customers_scored)
+
+    st.dataframe(
+        decisions[["customer_id", "segment_name", "revenue_total", "recency_days", "churn_risk", "recommended_action"]],
+        use_container_width=True,
+    )    
 
 with tabs[5]:
     st.subheader("Raw data")
