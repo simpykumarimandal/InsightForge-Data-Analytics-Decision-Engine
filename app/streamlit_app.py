@@ -151,8 +151,33 @@ with tabs[0]:
         if key in summary and not summary[key].empty:
             with cols[i]:
                 st.plotly_chart(
-                    px.pie(summary[key], names=summary[key].columns[0], values="orders", title=key.replace("_", " ").title()),
-                    use_container_width=True,
+               #     px.pie(summary[key], names=summary[key].columns[0], values="orders", title=key.replace("_", " ").title()),
+                #    use_container_width=True,
+                fig = px.pie(
+    summary[key],
+    names=summary[key].columns[0],
+    values="orders",
+)
+
+# Clean labels (remove clutter)
+fig.update_traces(
+    textinfo="percent+label",   # remove small noisy numbers
+    textposition="inside",      # keep labels inside slices
+    insidetextorientation="radial"
+)
+
+# Center + fix layout
+fig.update_layout(
+    margin=dict(t=40, b=40, l=40, r=40),
+    showlegend=True,
+    legend=dict(
+        orientation="v",
+        x=1.05,   # push legend right
+        y=0.5
+    )
+)
+
+st.plotly_chart(fig, use_container_width=True)
                 )
                 shown = summary[key].sort_values("orders", ascending=False)
                 st.dataframe(shown, use_container_width=True, hide_index=True)
